@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #F6F7F2;
+  --color-card: #FFFFFF;
+  --color-green: #789F80;
+  --color-green-dark: #41604A;
+  --color-green-light: #A8C5AB;
+  --color-blue: #78A7BB;
+  --color-blue-dark: #5A8A9E;
+  --color-blue-light: #C7DDE5;
+  --color-beige: #E8DDC8;
+  --color-beige-dark: #D5C8AE;
+  --color-terracotta: #C98568;
+  --color-terracotta-light: #D9A48C;
+  --color-text: #28332B;
+  --color-text-secondary: #667069;
+  --color-border: #DDE3DA;
+  --color-border-light: #E8ECE5;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  *:focus-visible {
+    outline: 2px solid var(--color-green);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+@keyframes water-fill {
+  from { height: 0%; }
+  to { height: var(--water-level); }
+}
+@keyframes breathe-in {
+  from { transform: scale(1); }
+  to { transform: scale(1.5); }
+}
+@keyframes breathe-out {
+  from { transform: scale(1.5); }
+  to { transform: scale(1); }
+}
+
+.animate-fade-in { animation: fadeIn 0.4s ease-out; }
+.animate-slide-up { animation: slideUp 0.5s ease-out; }
+.animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
