@@ -1,406 +1,435 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sun, Target, Brain, ClipboardCheck, BookOpen, Trophy } from "lucide-react";
-import { useAppStore } from "@/lib/store";
+import { Home, Lock, Check, Sparkles, Trophy, Info, RotateCcw } from "lucide-react";
+import { useAppStore, ACHIEVEMENTS_DEF } from "@/lib/store";
+import Link from "next/link";
 
-interface PlantDef {
+// Room grid size
+const GRID_COLS = 8;
+const GRID_ROWS = 6;
+
+// Item definitions - some locked behind achievements
+interface RoomItemDef {
   id: string;
   name: string;
-  icon: string;
-  color: string;
-  bgLight: string;
-  description: string;
-  growthSource: string;
-  getGrowth: () => number;
-  milestones: number[];
-  stages: string[];
+  emoji: string;
+  width: number;
+  height: number;
+  category: string;
+  tip: string;
+  requiredAchievement: string | null;
+  requiredLabel: string;
+  xpReward: number;
 }
 
-function getStage(milestones: number[], growth: number): number {
-  for (let i = milestones.length - 1; i >= 0; i--) {
-    if (growth >= milestones[i]) return i + 1;
-  }
-  return 0;
+const ROOM_ITEMS: RoomItemDef[] = [
+  { id: "desk", name: "Mesa", emoji: "🪑", width: 3, height: 1, category: "mobília", tip: "A mesa deve ter altura que permita cotovelos em ~90°.", requiredAchievement: null, requiredLabel: "", xpReward: 5 },
+  { id: "chair", name: "Cadeira", emoji: "💺", width: 2, height: 2, category: "mobília", tip: "Cadeira com suporte lombar. Pés apoiados no chão.", requiredAchievement: null, requiredLabel: "", xpReward: 5 },
+  { id: "monitor", name: "Monitor", emoji: "🖥️", width: 2, height: 1, category: "tecnologia", tip: "Topo do monitor na altura dos olhos. Distância de um braço.", requiredAchievement: "first_step", requiredLabel: "Crie seu perfil", xpReward: 10 },
+  { id: "keyboard", name: "Teclado", emoji: "⌨️", width: 2, height: 1, category: "tecnologia", tip: "Punhos retos ao digitar. Na mesma altura da mesa.", requiredAchievement: "focused", requiredLabel: "Complete um Pomodoro", xpReward: 10 },
+  { id: "mouse", name: "Mouse", emoji: "🖱️", width: 1, height: 1, category: "tecnologia", tip: "Próximo ao teclado. Punho reto ao usar.", requiredAchievement: "focused", requiredLabel: "Complete um Pomodoro", xpReward: 10 },
+  { id: "plant", name: "Planta", emoji: "🪴", width: 1, height: 1, category: "decoração", tip: "Plantas melhoram o humor e a qualidade do ar!", requiredAchievement: "curious", requiredLabel: "Explore 3 conteúdos", xpReward: 10 },
+  { id: "lamp", name: "Luminária", emoji: "💡", width: 1, height: 1, category: "iluminação", tip: "Iluminação adequada reduz fadiga visual.", requiredAchievement: "hello_equi", requiredLabel: "Converse com o EQUI", xpReward: 10 },
+  { id: "bookshelf", name: "Estante", emoji: "📚", width: 1, height: 2, category: "organização", tip: "Mantenha materiais frequentes ao alcance.", requiredAchievement: "active_mind", requiredLabel: "Complete um quiz", xpReward: 15 },
+  { id: "window", name: "Janela", emoji: "🪟", width: 2, height: 1, category: "iluminação", tip: "Luz natural melhora o humor e o foco. Evite reflexos no monitor.", requiredAchievement: "first_checkin", requiredLabel: "Faça um check-in", xpReward: 15 },
+  { id: "poster", name: "Quadro motivacional", emoji: "🖼️", width: 1, height: 1, category: "decoração", tip: "Um ambiente pessoal ajuda na motivação.", requiredAchievement: "ergonomics", requiredLabel: "Complete o desafio de ergonomia", xpReward: 15 },
+  { id: "coffee", name: "Café", emoji: "☕", width: 1, height: 1, category: "conforto", tip: "Hidrate-se! Alterne café com água.", requiredAchievement: "self_knowledge", requiredLabel: "3 check-ins em dias diferentes", xpReward: 20 },
+  { id: "yoga_mat", name: "Tapete de alongamento", emoji: "🧘", width: 2, height: 1, category: "movimento", tip: "Ter um espaço para alongamento incentiva pausas ativas.", requiredAchievement: "concentrated", requiredLabel: "Complete 5 Pomodoros", xpReward: 20 },
+];
+
+interface PlacedItem {
+  id: string;
+  itemId: string;
+  row: number;
+  col: number;
 }
 
-function getProgress(milestones: number[], growth: number): number {
-  const stage = getStage(milestones, growth);
-  if (stage === 0) return growth > 0 ? growth / milestones[0] : 0;
-  if (stage >= milestones.length) return 1;
-  const prev = milestones[stage - 1];
-  const next = milestones[stage];
-  return (growth - prev) / (next - prev);
-}
-
-// Plant visual component
-function PlantVisual({ stage, color, bgLight }: { stage: number; color: string; bgLight: string }) {
-  const stageEmojis = ["🪹", "🌱", "🌿", "🪴", "🌸", "🌳"];
-  const emoji = stageEmojis[Math.min(stage, 5)];
-  const scale = 1 + stage * 0.15;
-
-  return (
-    <motion.div
-      initial={{ scale: 0.5, opacity: 0 }}
-      animate={{ scale, opacity: 1 }}
-      transition={{ type: "spring", stiffness: 200, damping: 15 }}
-      className="relative"
-    >
-      <div
-        className="flex items-center justify-center rounded-2xl"
-        style={{
-          width: 60 + stage * 10,
-          height: 60 + stage * 15,
-          background: stage > 0 ? `linear-gradient(to top, ${bgLight}40, ${bgLight}10)` : "transparent",
-        }}
-      >
-        <span className="text-center" style={{ fontSize: 28 + stage * 6 }}>{emoji}</span>
-      </div>
-
-      {/* Glow effect for higher stages */}
-      {stage >= 4 && (
-        <motion.div
-          animate={{ opacity: [0.2, 0.5, 0.2] }}
-          transition={{ repeat: Infinity, duration: 3 }}
-          className="absolute inset-0 rounded-2xl"
-          style={{ background: `radial-gradient(circle, ${color}30, transparent)` }}
-        />
-      )}
-
-      {/* Sparkle for max stage */}
-      {stage >= 5 && (
-        <motion.div
-          animate={{ opacity: [0, 1, 0], rotate: [0, 180, 360] }}
-          transition={{ repeat: Infinity, duration: 2 }}
-          className="absolute -top-2 -right-2 text-sm"
-        >
-          ✨
-        </motion.div>
-      )}
-    </motion.div>
-  );
-}
-
-// Pot/ground component
-function PotBase({ stage }: { stage: number }) {
-  return (
-    <div className="flex flex-col items-center mt-1">
-      {/* Soil line */}
-      <div className={`w-16 h-2 rounded-full ${stage > 0 ? "bg-green-dark/20" : "bg-border"}`} />
-      {/* Pot */}
-      <div className={`w-14 h-3 rounded-b-lg ${stage > 0 ? "bg-terracotta/40" : "bg-border-light"}`} />
-    </div>
-  );
-}
-
-export default function JardimPage() {
+export default function MonteAmbientePage() {
   const user = useAppStore((s) => s.user);
-  const focusRecords = useAppStore((s) => s.focusRecords);
-  const quizRecords = useAppStore((s) => s.quizRecords);
-  const checkinRecords = useAppStore((s) => s.checkinRecords);
   const achievements = useAppStore((s) => s.achievements);
-  const contentExplored = useAppStore((s) => s.contentExplored);
-  const [selectedPlant, setSelectedPlant] = useState<string | null>(null);
-  const [sparkles, setSparkles] = useState<{ id: number; x: number; y: number }[]>([]);
+  const xp = useAppStore((s) => s.xp);
+  const addXp = useAppStore((s) => s.addXp);
+  const addToast = useAppStore((s) => s.addToast);
+  const [placedItems, setPlacedItems] = useState<PlacedItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<string | null>(null);
+  const [showTip, setShowTip] = useState<{ item: RoomItemDef; pos: { row: number; col: number } } | null>(null);
+  const [placedTips, setPlacedTips] = useState<Set<string>>(new Set());
 
   const name = user?.name || "Visitante";
+  const hasAchievement = (id: string) => achievements.some(a => a.id === id);
 
-  const plants: PlantDef[] = [
-    {
-      id: "focus",
-      name: "Planta do Foco",
-      icon: "🌿",
-      color: "#41604A",
-      bgLight: "#A8C5AB",
-      description: "Cresce a cada Pomodoro concluído",
-      growthSource: "Pomodoros",
-      getGrowth: () => focusRecords.filter(r => r.completed).length,
-      milestones: [1, 3, 6, 10, 15],
-      stages: ["Semente", "Broto", "Crescendo", "Florescendo", "Plena"],
-    },
-    {
-      id: "knowledge",
-      name: "Flor do Saber",
-      icon: "🌸",
-      color: "#C98568",
-      bgLight: "#D9A48C",
-      description: "Cresce a cada quiz completado",
-      growthSource: "Quizzes",
-      getGrowth: () => quizRecords.length,
-      milestones: [1, 3, 5, 8, 12],
-      stages: ["Semente", "Broto", "Crescendo", "Florescendo", "Plena"],
-    },
-    {
-      id: "wellbeing",
-      name: "Girassol do Bem-Estar",
-      icon: "🌻",
-      color: "#78A7BB",
-      bgLight: "#C7DDE5",
-      description: "Cresce a cada check-in realizado",
-      growthSource: "Check-ins",
-      getGrowth: () => checkinRecords.length,
-      milestones: [1, 3, 5, 8, 12],
-      stages: ["Semente", "Broto", "Crescendo", "Florescendo", "Plena"],
-    },
-    {
-      id: "curiosity",
-      name: "Erva da Curiosidade",
-      icon: "🪴",
-      color: "#789F80",
-      bgLight: "#A8C5AB",
-      description: "Cresce ao explorar conteúdos educativos",
-      growthSource: "Conteúdos explorados",
-      getGrowth: () => contentExplored,
-      milestones: [1, 3, 6, 10, 15],
-      stages: ["Semente", "Broto", "Crescendo", "Florescendo", "Plena"],
-    },
-    {
-      id: "mastery",
-      name: "Árvore do Equilíbrio",
-      icon: "🌳",
-      color: "#41604A",
-      bgLight: "#E8DDC8",
-      description: "Cresce com suas conquistas desbloqueadas",
-      growthSource: "Conquistas",
-      getGrowth: () => achievements.length,
-      milestones: [1, 3, 5, 7, 10],
-      stages: ["Semente", "Broto", "Crescendo", "Florescendo", "Plena"],
-    },
-  ];
+  const isItemUnlocked = (item: RoomItemDef) => {
+    if (!item.requiredAchievement) return true;
+    return hasAchievement(item.requiredAchievement);
+  };
 
-  const totalGrowth = plants.reduce((sum, p) => sum + getStage(p.milestones, p.getGrowth()), 0);
-  const maxGrowth = plants.length * 5;
-  const gardenPercent = Math.round((totalGrowth / maxGrowth) * 100);
+  const unlockedCount = ROOM_ITEMS.filter(i => isItemUnlocked(i)).length;
+  const totalItems = ROOM_ITEMS.length;
+  const placedCount = placedItems.length;
 
-  // Sparkle animation
-  useEffect(() => {
-    if (totalGrowth === 0) return;
-    const interval = setInterval(() => {
-      const id = Date.now();
-      const x = 10 + Math.random() * 80;
-      const y = 5 + Math.random() * 40;
-      setSparkles(prev => [...prev.slice(-6), { id, x, y }]);
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [totalGrowth]);
+  // Check if a cell is occupied
+  const isOccupied = (row: number, col: number) => {
+    for (const placed of placedItems) {
+      const def = ROOM_ITEMS.find(i => i.id === placed.itemId);
+      if (!def) continue;
+      if (row >= placed.row && row < placed.row + def.height &&
+          col >= placed.col && col < placed.col + def.width) {
+        return placed;
+      }
+    }
+    return null;
+  };
 
-  const selected = plants.find(p => p.id === selectedPlant);
+  // Check if item fits at position
+  const canPlace = (item: RoomItemDef, row: number, col: number) => {
+    if (row + item.height > GRID_ROWS || col + item.width > GRID_COLS) return false;
+    for (let r = row; r < row + item.height; r++) {
+      for (let c = col; c < col + item.width; c++) {
+        if (isOccupied(r, c)) return false;
+      }
+    }
+    return true;
+  };
+
+  // Place item
+  const handlePlaceItem = (item: RoomItemDef, row: number, col: number) => {
+    if (!canPlace(item, row, col)) return;
+    if (!isItemUnlocked(item)) return;
+
+    const newPlaced: PlacedItem = {
+      id: `${item.id}-${Date.now()}`,
+      itemId: item.id,
+      row,
+      col,
+    };
+
+    setPlacedItems(prev => [...prev, newPlaced]);
+    setSelectedItem(null);
+    setShowTip({ item, pos: { row, col } });
+
+    // Give XP for first time placing this type
+    const tipKey = item.id;
+    if (!placedTips.has(tipKey)) {
+      setPlacedTips(prev => new Set(prev).add(tipKey));
+      addXp(item.xpReward);
+      addToast(`${item.name} adicionado! +${item.xpReward} XP`, "achievement");
+    } else {
+      addToast(`${item.name} adicionado.`, "success");
+    }
+  };
+
+  // Remove item
+  const handleRemoveItem = (placedId: string) => {
+    setPlacedItems(prev => prev.filter(p => p.id !== placedId));
+  };
+
+  // Clear all
+  const handleClearAll = () => {
+    setPlacedItems([]);
+    setPlacedTips(new Set());
+  };
+
+  // Get unique placed item types
+  const placedTypes = new Set(placedItems.map(p => p.itemId));
+
+  // Calculate room score
+  const roomScore = Math.min(100, Math.round((placedTypes.size / totalItems) * 100));
+
+  // Ergonomic evaluation
+  const getEvaluation = () => {
+    const tips: string[] = [];
+    const hasDesk = placedItems.some(p => p.itemId === "desk");
+    const hasChair = placedItems.some(p => p.itemId === "chair");
+    const hasMonitor = placedItems.some(p => p.itemId === "monitor");
+    const hasKeyboard = placedItems.some(p => p.itemId === "keyboard");
+    const hasLamp = placedItems.some(p => p.itemId === "lamp");
+    const hasWindow = placedItems.some(p => p.itemId === "window");
+
+    if (hasDesk && hasChair) tips.push("✓ Mesa e cadeira formam uma boa base de trabalho.");
+    if (hasMonitor && hasDesk) tips.push("✓ Monitor sobre a mesa — posição adequada.");
+    if (hasKeyboard && hasMonitor) tips.push("✓ Teclado e monitor configurados.");
+    if (hasLamp || hasWindow) tips.push("✓ Boa iluminação no ambiente.");
+    if (!hasDesk) tips.push("○ Adicione uma mesa para organizar seu espaço.");
+    if (!hasChair) tips.push("○ Uma cadeira ergonômica é essencial.");
+    if (!hasMonitor) tips.push("○ Um monitor na altura certa previne tensão cervical.");
+    if (!hasLamp && !hasWindow) tips.push("○ Iluminação adequada é importante para os olhos.");
+    if (placedItems.length === 0) tips.push("○ Seu ambiente está vazio. Comece adicionando os itens básicos!");
+
+    return tips;
+  };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-5xl mx-auto px-4 py-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-bold text-green-dark mb-1">🌱 Jardim Virtual</h1>
-        <p className="text-text-secondary mb-6">
-          Seu jardim cresce conforme você usa o Equilíbrio. Cuide das suas plantas cuidando de você!
+        <h1 className="text-2xl font-bold text-green-dark mb-1 flex items-center gap-2">
+          <Home className="text-green" /> Monte Seu Ambiente
+        </h1>
+        <p className="text-text-secondary mb-2">
+          Organize seu espaço de trabalho. Itens são desbloqueados conforme você conquista conquistas!
+        </p>
+        <p className="text-xs text-text-secondary italic mb-6">
+          Itens com 🔒 precisam de conquistas específicas — explore o site para desbloquear tudo!
         </p>
       </motion.div>
 
-      {/* Garden overview */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="bg-card rounded-xl border border-border p-5 mb-6">
-        <div className="flex items-center justify-between mb-3">
+      {/* Progress bar */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="bg-card rounded-xl border border-border p-4 mb-6">
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <h2 className="font-semibold text-text">Jardim de {name}</h2>
-            <p className="text-sm text-text-secondary">
-              Saúde do jardim: <span className="font-medium text-green-dark">{gardenPercent}%</span>
-            </p>
+            <span className="font-semibold text-text text-sm">Itens desbloqueados: {unlockedCount}/{totalItems}</span>
+            <span className="text-text-secondary text-xs ml-3">Colocados: {placedCount}</span>
           </div>
-          <div className="text-3xl">
-            {gardenPercent === 0 ? "🏜️" : gardenPercent < 25 ? "🌱" : gardenPercent < 50 ? "🌿" : gardenPercent < 75 ? "🌸" : gardenPercent < 100 ? "🌻" : "🌳"}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-green-dark">{roomScore}%</span>
+            {placedItems.length > 0 && (
+              <button onClick={handleClearAll} className="p-1.5 rounded-lg text-text-secondary hover:text-terracotta hover:bg-border-light transition" title="Limpar ambiente">
+                <RotateCcw size={14} />
+              </button>
+            )}
           </div>
         </div>
-        <div className="w-full h-3 bg-border-light rounded-full overflow-hidden">
+        <div className="w-full h-2.5 bg-border-light rounded-full overflow-hidden">
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: `${gardenPercent}%` }}
-            transition={{ duration: 1 }}
+            animate={{ width: `${(unlockedCount / totalItems) * 100}%` }}
+            transition={{ duration: 0.8 }}
             className="h-full bg-green-dark rounded-full"
           />
         </div>
-        <p className="text-xs text-text-secondary mt-2">
-          {totalGrowth} de {maxGrowth} pontos de crescimento
-        </p>
       </motion.div>
 
-      {/* Garden scene */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="relative rounded-2xl overflow-hidden mb-6 border border-border" style={{ minHeight: 340 }}>
-        {/* Sky gradient */}
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-light/30 via-background/80 to-green-light/20" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Items sidebar */}
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }} className="lg:col-span-1">
+          <div className="bg-card rounded-xl border border-border p-4">
+            <h2 className="font-semibold text-text mb-3 text-sm">Itens disponíveis</h2>
+            <div className="space-y-2 max-h-[500px] overflow-y-auto">
+              {ROOM_ITEMS.map((item) => {
+                const unlocked = isItemUnlocked(item);
+                const isPlaced = placedTypes.has(item.id);
+                const isSelected = selectedItem === item.id;
 
-        {/* Animated clouds */}
-        <motion.div
-          animate={{ x: [0, 40, 0] }}
-          transition={{ repeat: Infinity, duration: 25, ease: "linear" }}
-          className="absolute top-6 left-8 text-4xl opacity-25 select-none"
-        >
-          ☁️
+                return (
+                  <motion.button
+                    key={item.id}
+                    whileHover={unlocked ? { scale: 1.02 } : {}}
+                    whileTap={unlocked ? { scale: 0.98 } : {}}
+                    onClick={() => {
+                      if (unlocked && !isPlaced) {
+                        setSelectedItem(isSelected ? null : item.id);
+                      }
+                    }}
+                    className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition text-sm ${
+                      !unlocked ? "opacity-50 cursor-not-allowed" :
+                      isPlaced ? "bg-green-light/30 cursor-default" :
+                      isSelected ? "bg-green-dark text-white ring-2 ring-green" :
+                      "hover:bg-border-light cursor-pointer"
+                    }`}
+                  >
+                    <span className="text-xl flex-shrink-0">{item.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{item.name}</p>
+                      {!unlocked ? (
+                        <p className="text-xs text-text-secondary flex items-center gap-1">
+                          <Lock size={10} /> {item.requiredLabel}
+                        </p>
+                      ) : isPlaced ? (
+                        <p className="text-xs text-green-dark flex items-center gap-1">
+                          <Check size={10} /> Colocado
+                        </p>
+                      ) : isSelected ? (
+                        <p className="text-xs opacity-80">Clique no ambiente para posicionar</p>
+                      ) : (
+                        <p className="text-xs text-text-secondary">{item.category} · +{item.xpReward} XP</p>
+                      )}
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
         </motion.div>
-        <motion.div
-          animate={{ x: [0, -30, 0] }}
-          transition={{ repeat: Infinity, duration: 18, ease: "linear" }}
-          className="absolute top-14 right-12 text-3xl opacity-20 select-none"
-        >
-          ☁️
+
+        {/* Room grid */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-2">
+          <div className="bg-card rounded-xl border border-border p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-text text-sm">Seu ambiente</h2>
+              {selectedItem && (
+                <span className="text-xs text-green-dark font-medium animate-pulse-soft">
+                  Clique em uma posição para colocar {ROOM_ITEMS.find(i => i.id === selectedItem)?.name}
+                </span>
+              )}
+            </div>
+
+            {/* Room visualization */}
+            <div className="relative bg-gradient-to-b from-blue-light/10 to-green-light/10 rounded-xl border border-border-light p-2 mb-4">
+              {/* Room label */}
+              <p className="text-xs text-text-secondary text-center mb-2">Ambiente de {name}</p>
+
+              {/* Grid */}
+              <div
+                className="grid gap-1 relative"
+                style={{
+                  gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
+                  gridTemplateRows: `repeat(${GRID_ROWS}, 1fr)`,
+                }}
+              >
+                {Array.from({ length: GRID_ROWS * GRID_COLS }, (_, idx) => {
+                  const row = Math.floor(idx / GRID_COLS);
+                  const col = idx % GRID_COLS;
+                  const occupied = isOccupied(row, col);
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`aspect-square rounded-lg border transition text-center flex items-center justify-center relative ${
+                        occupied ? "border-transparent" :
+                        selectedItem ? "border-dashed border-green/40 hover:bg-green-light/20 hover:border-green cursor-pointer" :
+                        "border-border-light/50"
+                      }`}
+                      style={{ minHeight: 40 }}
+                      onClick={() => {
+                        if (selectedItem && !occupied) {
+                          const item = ROOM_ITEMS.find(i => i.id === selectedItem);
+                          if (item) handlePlaceItem(item, row, col);
+                        }
+                      }}
+                    >
+                      {/* Render placed items at their origin cell */}
+                      {occupied && occupied.row === row && occupied.col === col && (() => {
+                        const def = ROOM_ITEMS.find(i => i.id === occupied.itemId);
+                        if (!def) return null;
+                        return (
+                          <motion.div
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                            className="absolute inset-0 flex items-center justify-center rounded-lg bg-card border border-green/30 shadow-sm cursor-pointer hover:ring-2 hover:ring-terracotta z-10"
+                            style={{
+                              gridColumn: `span ${def.width}`,
+                              gridRow: `span ${def.height}`,
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveItem(occupied.id);
+                            }}
+                            title={`Clique para remover ${def.name}`}
+                          >
+                            <span className="text-lg">{def.emoji}</span>
+                          </motion.div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Placed items overlay (for multi-cell items) */}
+              <div className="absolute inset-0 pointer-events-none p-2">
+                {placedItems.map((placed) => {
+                  const def = ROOM_ITEMS.find(i => i.id === placed.itemId);
+                  if (!def) return null;
+                  // Calculate position as percentage
+                  const left = (placed.col / GRID_COLS) * 100;
+                  const top = (placed.row / GRID_ROWS) * 100;
+                  const width = (def.width / GRID_COLS) * 100;
+                  const height = (def.height / GRID_ROWS) * 100;
+
+                  return (
+                    <motion.div
+                      key={placed.id}
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                      className="absolute flex items-center justify-center rounded-lg bg-card/90 border border-green/30 shadow-sm pointer-events-auto cursor-pointer hover:ring-2 hover:ring-terracotta z-10"
+                      style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
+                      onClick={() => {
+                        setShowTip({ item: def, pos: { row: placed.row, col: placed.col } });
+                      }}
+                      title={`${def.name} — clique para dica, duplo-clique para remover`}
+                      onDoubleClick={() => handleRemoveItem(placed.id)}
+                    >
+                      <span style={{ fontSize: Math.min(width * 0.8, height * 0.8, 32) }} className="select-none">{def.emoji}</span>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Tip display */}
+            <AnimatePresence>
+              {showTip && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="bg-green-light/30 rounded-xl p-3 mb-4 overflow-hidden"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">{showTip.item.emoji}</span>
+                    <div className="flex-1">
+                      <p className="font-medium text-green-dark text-sm">{showTip.item.name}</p>
+                      <p className="text-xs text-text mt-0.5">{showTip.item.tip}</p>
+                    </div>
+                    <button onClick={() => setShowTip(null)} className="text-text-secondary hover:text-text text-xs">✕</button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Evaluation */}
+            <div className="border-t border-border pt-3">
+              <h3 className="font-semibold text-text text-sm mb-2 flex items-center gap-1">
+                <Info size={14} /> Avaliação do ambiente
+              </h3>
+              <div className="space-y-1">
+                {getEvaluation().map((tip, i) => (
+                  <p key={i} className={`text-xs ${tip.startsWith("✓") ? "text-green-dark" : tip.startsWith("○") ? "text-text-secondary" : "text-text"}`}>
+                    {tip}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
         </motion.div>
+      </div>
 
-        {/* Sun */}
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 60, ease: "linear" }}
-          className="absolute top-4 right-6"
-        >
-          <Sun size={28} className="text-terracotta opacity-30" />
-        </motion.div>
-
-        {/* Sparkles */}
-        <AnimatePresence>
-          {sparkles.map(s => (
-            <motion.div
-              key={s.id}
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: [0, 1, 0], scale: [0, 1, 0.5] }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.5 }}
-              className="absolute text-xs pointer-events-none select-none"
-              style={{ left: `${s.x}%`, top: `${s.y}%` }}
-            >
-              ✨
-            </motion.div>
-          ))}
-        </AnimatePresence>
-
-        {/* Ground */}
-        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-green-dark/15 to-transparent" />
-
-        {/* Plants row */}
-        <div className="relative z-10 flex justify-center items-end gap-2 sm:gap-4 md:gap-6 px-4 pt-24 pb-10" style={{ minHeight: 320 }}>
-          {plants.map((plant, i) => {
-            const growth = plant.getGrowth();
-            const stage = getStage(plant.milestones, growth);
+      {/* Unlock guide */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="bg-card rounded-xl border border-border p-5 mt-6">
+        <h2 className="font-semibold text-text mb-3 flex items-center gap-2">
+          <Trophy size={16} className="text-terracotta" /> Como desbloquear itens
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {ROOM_ITEMS.filter(item => item.requiredAchievement).map((item) => {
+            const unlocked = isItemUnlocked(item);
+            const achDef = ACHIEVEMENTS_DEF.find(a => a.id === item.requiredAchievement);
 
             return (
-              <motion.button
-                key={plant.id}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 * i }}
-                onClick={() => setSelectedPlant(selectedPlant === plant.id ? null : plant.id)}
-                className={`flex flex-col items-center p-2 rounded-xl transition ${
-                  selectedPlant === plant.id ? "bg-white/60 ring-2 ring-green" : "hover:bg-white/30"
-                }`}
-              >
-                {/* Plant name */}
-                <p className="text-xs font-medium text-text-secondary mb-2 text-center leading-tight" style={{ maxWidth: 80 }}>
-                  {plant.name.replace("Planta do ", "").replace("Flor do ", "").replace("Girassol do ", "").replace("Erva da ", "").replace("Árvore do ", "")}
-                </p>
-
-                {/* Plant visual */}
-                <PlantVisual stage={stage} color={plant.color} bgLight={plant.bgLight} />
-
-                {/* Pot */}
-                <PotBase stage={stage} />
-
-                {/* Stage dots */}
-                <div className="flex gap-0.5 mt-2">
-                  {[1, 2, 3, 4, 5].map(s => (
-                    <div
-                      key={s}
-                      className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
-                        s <= stage ? "bg-green-dark" : "bg-border"
-                      }`}
-                    />
-                  ))}
+              <div key={item.id} className={`flex items-center gap-3 p-3 rounded-xl ${unlocked ? "bg-green-light/30" : "bg-border-light/50"}`}>
+                <span className="text-xl">{unlocked ? item.emoji : "🔒"}</span>
+                <div className="flex-1">
+                  <p className={`text-sm font-medium ${unlocked ? "text-green-dark" : "text-text"}`}>{item.name}</p>
+                  <p className="text-xs text-text-secondary">
+                    {unlocked ? (
+                      <span className="flex items-center gap-1"><Check size={10} className="text-green-dark" /> Desbloqueado</span>
+                    ) : (
+                      <span>{achDef?.icon} {item.requiredLabel}</span>
+                    )}
+                  </p>
                 </div>
-
-                {/* Stage label */}
-                <p className="text-[10px] text-text-secondary mt-0.5">
-                  {stage === 0 ? "Vazio" : plant.stages[stage - 1]}
-                </p>
-              </motion.button>
+              </div>
             );
           })}
         </div>
       </motion.div>
 
-      {/* Selected plant details */}
-      <AnimatePresence>
-        {selected && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="bg-card rounded-xl border border-border p-5 mb-6 overflow-hidden"
-          >
-            <div className="flex items-start gap-4">
-              <div className="text-4xl">{selected.icon}</div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-text mb-1">{selected.name}</h3>
-                <p className="text-sm text-text-secondary mb-2">{selected.description}</p>
-                <p className="text-xs text-text-secondary mb-1">
-                  Fonte de crescimento: <strong className="text-text">{selected.growthSource}</strong> — {selected.getGrowth()} registrado(s)
-                </p>
-                {(() => {
-                  const stage = getStage(selected.milestones, selected.getGrowth());
-                  const nextMilestone = stage < selected.milestones.length ? selected.milestones[stage] : null;
-                  if (nextMilestone !== null) {
-                    return (
-                      <p className="text-xs text-green-dark font-medium">
-                        Próximo estágio em: {nextMilestone - selected.getGrowth()} {selected.growthSource.toLowerCase()} mais
-                      </p>
-                    );
-                  }
-                  return <p className="text-xs text-green-dark font-medium">🌟 Estágio máximo atingido!</p>;
-                })()}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* How it works */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="bg-card rounded-xl border border-border p-5 mb-6">
-        <h2 className="font-semibold text-text mb-4">Como funciona</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[
-            { icon: <Target size={16} className="text-green-dark" />, label: "Pomodoros concluídos", grows: "Planta do Foco 🌿" },
-            { icon: <Brain size={16} className="text-terracotta" />, label: "Quizzes completados", grows: "Flor do Saber 🌸" },
-            { icon: <ClipboardCheck size={16} className="text-blue" />, label: "Check-ins realizados", grows: "Girassol do Bem-Estar 🌻" },
-            { icon: <BookOpen size={16} className="text-green" />, label: "Conteúdos explorados", grows: "Erva da Curiosidade 🪴" },
-            { icon: <Trophy size={16} className="text-terracotta" />, label: "Conquistas desbloqueadas", grows: "Árvore do Equilíbrio 🌳" },
-          ].map((item, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-border-light/50">
-              <div className="flex-shrink-0">{item.icon}</div>
-              <div>
-                <p className="text-sm font-medium text-text">{item.label}</p>
-                <p className="text-xs text-text-secondary">→ {item.grows}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Growth stages */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }} className="bg-card rounded-xl border border-border p-5">
-        <h2 className="font-semibold text-text mb-3">Estágios de crescimento</h2>
-        <div className="flex flex-wrap gap-3">
-          {[
-            { emoji: "🪹", label: "Vazio", desc: "Nenhuma atividade" },
-            { emoji: "🌱", label: "Semente", desc: "Primeiros passos" },
-            { emoji: "🌿", label: "Broto", desc: "Começando a crescer" },
-            { emoji: "🪴", label: "Crescendo", desc: "Ficando forte" },
-            { emoji: "🌸", label: "Florescendo", desc: "Quase plena" },
-            { emoji: "🌳", label: "Plena", desc: "Estágio máximo ✨" },
-          ].map((s, i) => (
-            <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-border-light/50">
-              <span className="text-lg">{s.emoji}</span>
-              <div>
-                <p className="text-sm font-medium text-text">{s.label}</p>
-                <p className="text-xs text-text-secondary">{s.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </motion.div>
+      {/* Disclaimer */}
+      <p className="text-xs text-text-secondary text-center mt-6 italic">
+        As dicas são baseadas em recomendações de ergonomia e não substituem avaliação profissional.
+      </p>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Droplets, Moon, Target, ClipboardCheck, Laptop, MessageCircle, ArrowRight, Sparkles, Activity, TrendingUp } from "lucide-react";
+import { Droplets, Moon, Target, ClipboardCheck, Laptop, MessageCircle, ArrowRight, Sparkles, Activity, TrendingUp, Home } from "lucide-react";
 import { useAppStore, getLevelFromXp } from "@/lib/store";
 
 const fadeUp = {
@@ -38,6 +38,7 @@ export default function HomePage() {
     { href: "/checkin", label: "Check-in", desc: "Como você está hoje?", icon: ClipboardCheck, action: "Fazer Check-in", color: "bg-border-light text-text" },
     { href: "/ergonomia", label: "Ergonomia", desc: "Explore sua estação.", icon: Laptop, action: "Explorar", color: "bg-beige text-green-dark" },
     { href: "/equi", label: "EQUI", desc: "Converse com o assistente.", icon: MessageCircle, action: "Conversar", color: "bg-green-light text-green-dark" },
+  { href: "/jogo", label: "Ambiente", desc: "Monte seu espaço de trabalho.", icon: Home, action: "Montar", color: "bg-beige text-terracotta" },
   ];
 
   return (
@@ -109,13 +110,13 @@ export default function HomePage() {
       {/* Game teaser */}
       <motion.section {...fadeUp} transition={{ delay: 0.3 }} className="mb-8">
         <div className="bg-card rounded-xl border border-border p-6 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Novo</p>
-          <h2 className="text-xl font-bold text-green-dark mb-2">🌱 Jardim Virtual</h2>
+          <p className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Interativo</p>
+          <h2 className="text-xl font-bold text-green-dark mb-2">🏠 Monte Seu Ambiente</h2>
           <p className="text-sm text-text-secondary max-w-md mx-auto mb-4">
-            Seu jardim cresce conforme você usa o Equilíbrio. Cuide das suas plantas cuidando de você!
+            Organize seu espaço de trabalho e desbloqueie itens conquistando conquistas!
           </p>
           <Link href="/jogo" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-dark text-white text-sm font-medium hover:bg-green transition">
-            Ver meu jardim <ArrowRight size={14} />
+            Montar ambiente <ArrowRight size={14} />
           </Link>
         </div>
       </motion.section>

@@ -203,7 +203,7 @@ const NAV_ITEMS = [
   { href: "/equi", label: "EQUI", icon: MessageCircle },
   { href: "/quiz", label: "Quiz", icon: Brain },
   { href: "/conquistas", label: "Conquistas", icon: Trophy },
-  { href: "/jogo", label: "Jardim", icon: Gamepad2 },
+  { href: "/jogo", label: "Ambiente", icon: Laptop },
 ];
 
 export function Header() {
