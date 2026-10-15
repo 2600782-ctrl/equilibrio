@@ -1,248 +1,244 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Home, Lock, Check, Sparkles, Trophy, Info, RotateCcw } from "lucide-react";
+import { Home, Lock, RotateCw, Trash2, ZoomIn, ZoomOut, Sparkles, Check, Info, Palette } from "lucide-react";
 import { useAppStore, ACHIEVEMENTS_DEF } from "@/lib/store";
-import Link from "next/link";
 
-// Room grid size
-const GRID_COLS = 8;
-const GRID_ROWS = 6;
-
-// Item definitions - some locked behind achievements
-interface RoomItemDef {
-  id: string;
-  name: string;
-  emoji: string;
-  width: number;
-  height: number;
-  category: string;
-  tip: string;
-  requiredAchievement: string | null;
-  requiredLabel: string;
-  xpReward: number;
-}
-
-const ROOM_ITEMS: RoomItemDef[] = [
-  { id: "desk", name: "Mesa", emoji: "🪑", width: 3, height: 1, category: "mobília", tip: "A mesa deve ter altura que permita cotovelos em ~90°.", requiredAchievement: null, requiredLabel: "", xpReward: 5 },
-  { id: "chair", name: "Cadeira", emoji: "💺", width: 2, height: 2, category: "mobília", tip: "Cadeira com suporte lombar. Pés apoiados no chão.", requiredAchievement: null, requiredLabel: "", xpReward: 5 },
-  { id: "monitor", name: "Monitor", emoji: "🖥️", width: 2, height: 1, category: "tecnologia", tip: "Topo do monitor na altura dos olhos. Distância de um braço.", requiredAchievement: "first_step", requiredLabel: "Crie seu perfil", xpReward: 10 },
-  { id: "keyboard", name: "Teclado", emoji: "⌨️", width: 2, height: 1, category: "tecnologia", tip: "Punhos retos ao digitar. Na mesma altura da mesa.", requiredAchievement: "focused", requiredLabel: "Complete um Pomodoro", xpReward: 10 },
-  { id: "mouse", name: "Mouse", emoji: "🖱️", width: 1, height: 1, category: "tecnologia", tip: "Próximo ao teclado. Punho reto ao usar.", requiredAchievement: "focused", requiredLabel: "Complete um Pomodoro", xpReward: 10 },
-  { id: "plant", name: "Planta", emoji: "🪴", width: 1, height: 1, category: "decoração", tip: "Plantas melhoram o humor e a qualidade do ar!", requiredAchievement: "curious", requiredLabel: "Explore 3 conteúdos", xpReward: 10 },
-  { id: "lamp", name: "Luminária", emoji: "💡", width: 1, height: 1, category: "iluminação", tip: "Iluminação adequada reduz fadiga visual.", requiredAchievement: "hello_equi", requiredLabel: "Converse com o EQUI", xpReward: 10 },
-  { id: "bookshelf", name: "Estante", emoji: "📚", width: 1, height: 2, category: "organização", tip: "Mantenha materiais frequentes ao alcance.", requiredAchievement: "active_mind", requiredLabel: "Complete um quiz", xpReward: 15 },
-  { id: "window", name: "Janela", emoji: "🪟", width: 2, height: 1, category: "iluminação", tip: "Luz natural melhora o humor e o foco. Evite reflexos no monitor.", requiredAchievement: "first_checkin", requiredLabel: "Faça um check-in", xpReward: 15 },
-  { id: "poster", name: "Quadro motivacional", emoji: "🖼️", width: 1, height: 1, category: "decoração", tip: "Um ambiente pessoal ajuda na motivação.", requiredAchievement: "ergonomics", requiredLabel: "Complete o desafio de ergonomia", xpReward: 15 },
-  { id: "coffee", name: "Café", emoji: "☕", width: 1, height: 1, category: "conforto", tip: "Hidrate-se! Alterne café com água.", requiredAchievement: "self_knowledge", requiredLabel: "3 check-ins em dias diferentes", xpReward: 20 },
-  { id: "yoga_mat", name: "Tapete de alongamento", emoji: "🧘", width: 2, height: 1, category: "movimento", tip: "Ter um espaço para alongamento incentiva pausas ativas.", requiredAchievement: "concentrated", requiredLabel: "Complete 5 Pomodoros", xpReward: 20 },
-];
-
+// Types
 interface PlacedItem {
   id: string;
   itemId: string;
-  row: number;
-  col: number;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
 }
+
+// All items - rich variety
+const ITEMS = [
+  // Básicos (livres)
+  { id: "desk", name: "Mesa", emoji: "🪑", w: 90, h: 50, category: "Mobília", achievement: null, needLabel: "", tip: "Mesa na altura dos cotovelos em ~90°.", xp: 5 },
+  { id: "chair", name: "Cadeira", emoji: "💺", w: 50, h: 60, category: "Mobília", achievement: null, needLabel: "", tip: "Cadeira com suporte lombar. Pés apoiados.", xp: 5 },
+  { id: "rug", name: "Tapete", emoji: "🟫", w: 100, h: 60, category: "Decoração", achievement: null, needLabel: "", tip: "Tapete define áreas e traz conforto.", xp: 5 },
+  // Perfil
+  { id: "monitor", name: "Monitor", emoji: "🖥️", w: 60, h: 45, category: "Tecnologia", achievement: "first_step", needLabel: "Crie seu perfil", tip: "Topo na altura dos olhos, distância de um braço.", xp: 10 },
+  { id: "laptop", name: "Notebook", emoji: "💻", w: 50, h: 35, category: "Tecnologia", achievement: "first_step", needLabel: "Crie seu perfil", tip: "Eleve o notebook para altura dos olhos.", xp: 10 },
+  // Pomodoro
+  { id: "keyboard", name: "Teclado", emoji: "⌨️", w: 55, h: 20, category: "Tecnologia", achievement: "focused", needLabel: "Complete um Pomodoro", tip: "Punhos retos, na altura da mesa.", xp: 10 },
+  { id: "mouse", name: "Mouse", emoji: "🖱️", w: 25, h: 25, category: "Tecnologia", achievement: "focused", needLabel: "Complete um Pomodoro", tip: "Próximo ao teclado. Punho reto.", xp: 10 },
+  { id: "clock", name: "Relógio", emoji: "🕐", w: 30, h: 30, category: "Organização", achievement: "focused", needLabel: "Complete um Pomodoro", tip: "Acompanhe o tempo sem celular.", xp: 10 },
+  // Conteúdo
+  { id: "plant", name: "Planta", emoji: "🪴", w: 30, h: 35, category: "Decoração", achievement: "curious", needLabel: "Explore 3 conteúdos", tip: "Plantas melhoram humor e qualidade do ar!", xp: 10 },
+  { id: "flower", name: "Flores", emoji: "💐", w: 25, h: 30, category: "Decoração", achievement: "curious", needLabel: "Explore 3 conteúdos", tip: "Cores naturais acalmam o ambiente.", xp: 10 },
+  { id: "books", name: "Livros", emoji: "📚", w: 35, h: 30, category: "Organização", achievement: "curious", needLabel: "Explore 3 conteúdos", tip: "Materiais de referência ao alcance.", xp: 10 },
+  // EQUI
+  { id: "lamp", name: "Luminária", emoji: "💡", w: 25, h: 35, category: "Iluminação", achievement: "hello_equi", needLabel: "Converse com o EQUI", tip: "Iluminação adequada reduz fadiga visual.", xp: 10 },
+  { id: "candle", name: "Vela", emoji: "🕯️", w: 15, h: 25, category: "Decoração", achievement: "hello_equi", needLabel: "Converse com o EQUI", tip: "Ambiente acolhedor para pausas.", xp: 10 },
+  // Quiz
+  { id: "bookshelf", name: "Estante", emoji: "📚", w: 40, h: 60, category: "Organização", achievement: "active_mind", needLabel: "Complete um quiz", tip: "Organize materiais por frequência de uso.", xp: 15 },
+  { id: "globe", name: "Globo", emoji: "🌍", w: 30, h: 30, category: "Decoração", achievement: "active_mind", needLabel: "Complete um quiz", tip: "Curiosidade sobre o mundo!", xp: 15 },
+  // Check-in
+  { id: "window", name: "Janela", emoji: "🪟", w: 50, h: 40, category: "Iluminação", achievement: "first_checkin", needLabel: "Faça um check-in", tip: "Luz natural melhora humor e foco.", xp: 15 },
+  { id: "mirror", name: "Espelho", emoji: "🪞", w: 25, h: 40, category: "Decoração", achievement: "first_checkin", needLabel: "Faça um check-in", tip: "Amplia a sensação de espaço.", xp: 15 },
+  // Ergonomia
+  { id: "poster", name: "Quadro", emoji: "🖼️", w: 40, h: 30, category: "Decoração", achievement: "ergonomics", needLabel: "Desafio de ergonomia", tip: "Ambiente pessoal ajuda na motivação.", xp: 15 },
+  { id: "stand", name: "Suporte de monitor", emoji: "📐", w: 40, h: 25, category: "Ergonomia", achievement: "ergonomics", needLabel: "Desafio de ergonomia", tip: "Eleve o monitor à altura dos olhos.", xp: 15 },
+  // Autoconhecimento
+  { id: "coffee", name: "Café", emoji: "☕", w: 20, h: 20, category: "Conforto", achievement: "self_knowledge", needLabel: "3 check-ins em dias diferentes", tip: "Alterne café com água para hidratação.", xp: 20 },
+  { id: "teapot", name: "Chá", emoji: "🫖", w: 25, h: 20, category: "Conforto", achievement: "self_knowledge", needLabel: "3 check-ins em dias diferentes", tip: "Chá verde tem L-teanina, que auxilia foco.", xp: 20 },
+  { id: "water", name: "Garrafa de água", emoji: "💧", w: 15, h: 30, category: "Saúde", achievement: "self_knowledge", needLabel: "3 check-ins em dias diferentes", tip: "Mantenha água sempre acessível!", xp: 20 },
+  // Concentrado
+  { id: "yoga_mat", name: "Tapete yoga", emoji: "🧘", w: 60, h: 20, category: "Movimento", achievement: "concentrated", needLabel: "Complete 5 Pomodoros", tip: "Espaço para alongamento e pausas ativas.", xp: 20 },
+  { id: "speaker", name: "Caixa de som", emoji: "🔊", w: 25, h: 20, category: "Tecnologia", achievement: "concentrated", needLabel: "Complete 5 Pomodoros", tip: "Música ambiente pode ajudar no foco.", xp: 20 },
+  { id: "headphones", name: "Fones", emoji: "🎧", w: 30, h: 25, category: "Tecnologia", achievement: "concentrated", needLabel: "Complete 5 Pomodoros", tip: "Cancelamento de ruído para concentração.", xp: 20 },
+  // Perfeito
+  { id: "trophy", name: "Troféu", emoji: "🏆", w: 25, h: 30, category: "Especial", achievement: "perfect_quiz", needLabel: "Acerte 10/10 no quiz", tip: "Conquista especial! ⭐", xp: 30 },
+  { id: "stars", name: "Estrelas", emoji: "⭐", w: 30, h: 30, category: "Especial", achievement: "perfect_quiz", needLabel: "Acerte 10/10 no quiz", tip: "Brilho para seu ambiente! ✨", xp: 30 },
+];
+
+// Room themes
+const ROOM_THEMES = [
+  { id: "clean", name: "Claro", floor: "#F6F7F2", wall: "#FFFFFF", wallBorder: "#DDE3DA" },
+  { id: "warm", name: "Quente", floor: "#F5F0E6", wall: "#FAF5EB", wallBorder: "#E8DDC8" },
+  { id: "cool", name: "Fresco", floor: "#F0F4F2", wall: "#F5FAF8", wallBorder: "#C7DDE5" },
+  { id: "nature", name: "Natureza", floor: "#F2F5EE", wall: "#F7FAF4", wallBorder: "#A8C5AB" },
+  { id: "dark", name: "Escuro", floor: "#1a1f1c", wall: "#222822", wallBorder: "#333a33" },
+];
 
 export default function MonteAmbientePage() {
   const user = useAppStore((s) => s.user);
   const achievements = useAppStore((s) => s.achievements);
-  const xp = useAppStore((s) => s.xp);
   const addXp = useAppStore((s) => s.addXp);
   const addToast = useAppStore((s) => s.addToast);
-  const [placedItems, setPlacedItems] = useState<PlacedItem[]>([]);
-  const [selectedItem, setSelectedItem] = useState<string | null>(null);
-  const [showTip, setShowTip] = useState<{ item: RoomItemDef; pos: { row: number; col: number } } | null>(null);
-  const [placedTips, setPlacedTips] = useState<Set<string>>(new Set());
+  const [placed, setPlaced] = useState<PlacedItem[]>([]);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [selectedPlaced, setSelectedPlaced] = useState<string | null>(null);
+  const [showPanel, setShowPanel] = useState(true);
+  const [theme, setTheme] = useState("clean");
+  const [givenXp, setGivenXp] = useState<Set<string>>(new Set());
+  const [showTip, setShowTip] = useState<string | null>(null);
+  const roomRef = useRef<HTMLDivElement>(null);
 
   const name = user?.name || "Visitante";
-  const hasAchievement = (id: string) => achievements.some(a => a.id === id);
+  const hasAch = (id: string) => achievements.some(a => a.id === id);
+  const isUnlocked = (item: typeof ITEMS[0]) => !item.achievement || hasAch(item.achievement);
 
-  const isItemUnlocked = (item: RoomItemDef) => {
-    if (!item.requiredAchievement) return true;
-    return hasAchievement(item.requiredAchievement);
-  };
+  const unlockedCount = ITEMS.filter(i => isUnlocked(i)).length;
+  const placedTypes = new Set(placed.map(p => p.itemId));
 
-  const unlockedCount = ROOM_ITEMS.filter(i => isItemUnlocked(i)).length;
-  const totalItems = ROOM_ITEMS.length;
-  const placedCount = placedItems.length;
+  const currentTheme = ROOM_THEMES.find(t => t.id === theme) || ROOM_THEMES[0];
 
-  // Check if a cell is occupied
-  const isOccupied = (row: number, col: number) => {
-    for (const placed of placedItems) {
-      const def = ROOM_ITEMS.find(i => i.id === placed.itemId);
-      if (!def) continue;
-      if (row >= placed.row && row < placed.row + def.height &&
-          col >= placed.col && col < placed.col + def.width) {
-        return placed;
-      }
-    }
-    return null;
-  };
-
-  // Check if item fits at position
-  const canPlace = (item: RoomItemDef, row: number, col: number) => {
-    if (row + item.height > GRID_ROWS || col + item.width > GRID_COLS) return false;
-    for (let r = row; r < row + item.height; r++) {
-      for (let c = col; c < col + item.width; c++) {
-        if (isOccupied(r, c)) return false;
-      }
-    }
-    return true;
-  };
-
-  // Place item
-  const handlePlaceItem = (item: RoomItemDef, row: number, col: number) => {
-    if (!canPlace(item, row, col)) return;
-    if (!isItemUnlocked(item)) return;
-
+  // Add item to room at center
+  const handleAddItem = useCallback((item: typeof ITEMS[0]) => {
+    if (!isUnlocked(item)) return;
     const newPlaced: PlacedItem = {
       id: `${item.id}-${Date.now()}`,
       itemId: item.id,
-      row,
-      col,
+      x: 150 + Math.random() * 200,
+      y: 100 + Math.random() * 150,
+      scale: 1,
+      rotation: 0,
     };
+    setPlaced(prev => [...prev, newPlaced]);
+    setSelectedPlaced(newPlaced.id);
 
-    setPlacedItems(prev => [...prev, newPlaced]);
-    setSelectedItem(null);
-    setShowTip({ item, pos: { row, col } });
-
-    // Give XP for first time placing this type
-    const tipKey = item.id;
-    if (!placedTips.has(tipKey)) {
-      setPlacedTips(prev => new Set(prev).add(tipKey));
-      addXp(item.xpReward);
-      addToast(`${item.name} adicionado! +${item.xpReward} XP`, "achievement");
-    } else {
-      addToast(`${item.name} adicionado.`, "success");
+    if (!givenXp.has(item.id)) {
+      setGivenXp(prev => new Set(prev).add(item.id));
+      addXp(item.xp);
+      addToast(`${item.name} adicionado! +${item.xp} XP`, "achievement");
     }
-  };
+  }, [achievements, givenXp, addXp, addToast]);
 
   // Remove item
-  const handleRemoveItem = (placedId: string) => {
-    setPlacedItems(prev => prev.filter(p => p.id !== placedId));
+  const handleRemove = (id: string) => {
+    setPlaced(prev => prev.filter(p => p.id !== id));
+    if (selectedPlaced === id) setSelectedPlaced(null);
+  };
+
+  // Rotate item
+  const handleRotate = (id: string) => {
+    setPlaced(prev => prev.map(p => p.id === id ? { ...p, rotation: (p.rotation + 45) % 360 } : p));
+  };
+
+  // Scale item
+  const handleScale = (id: string, dir: number) => {
+    setPlaced(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      const newScale = Math.max(0.5, Math.min(2.5, p.scale + dir * 0.2));
+      return { ...p, scale: Math.round(newScale * 10) / 10 };
+    }));
   };
 
   // Clear all
-  const handleClearAll = () => {
-    setPlacedItems([]);
-    setPlacedTips(new Set());
+  const handleClear = () => {
+    setPlaced([]);
+    setSelectedPlaced(null);
+    setGivenXp(new Set());
   };
 
-  // Get unique placed item types
-  const placedTypes = new Set(placedItems.map(p => p.itemId));
-
-  // Calculate room score
-  const roomScore = Math.min(100, Math.round((placedTypes.size / totalItems) * 100));
-
-  // Ergonomic evaluation
-  const getEvaluation = () => {
-    const tips: string[] = [];
-    const hasDesk = placedItems.some(p => p.itemId === "desk");
-    const hasChair = placedItems.some(p => p.itemId === "chair");
-    const hasMonitor = placedItems.some(p => p.itemId === "monitor");
-    const hasKeyboard = placedItems.some(p => p.itemId === "keyboard");
-    const hasLamp = placedItems.some(p => p.itemId === "lamp");
-    const hasWindow = placedItems.some(p => p.itemId === "window");
-
-    if (hasDesk && hasChair) tips.push("✓ Mesa e cadeira formam uma boa base de trabalho.");
-    if (hasMonitor && hasDesk) tips.push("✓ Monitor sobre a mesa — posição adequada.");
-    if (hasKeyboard && hasMonitor) tips.push("✓ Teclado e monitor configurados.");
-    if (hasLamp || hasWindow) tips.push("✓ Boa iluminação no ambiente.");
-    if (!hasDesk) tips.push("○ Adicione uma mesa para organizar seu espaço.");
-    if (!hasChair) tips.push("○ Uma cadeira ergonômica é essencial.");
-    if (!hasMonitor) tips.push("○ Um monitor na altura certa previne tensão cervical.");
-    if (!hasLamp && !hasWindow) tips.push("○ Iluminação adequada é importante para os olhos.");
-    if (placedItems.length === 0) tips.push("○ Seu ambiente está vazio. Comece adicionando os itens básicos!");
-
-    return tips;
-  };
+  const selectedDef = selectedPlaced ? placed.find(p => p.id === selectedPlaced) : null;
+  const selectedItemDef = selectedDef ? ITEMS.find(i => i.id === selectedDef.itemId) : null;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-6">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl font-bold text-green-dark mb-1 flex items-center gap-2">
-          <Home className="text-green" /> Monte Seu Ambiente
+          🏠 Monte Seu Ambiente
         </h1>
-        <p className="text-text-secondary mb-2">
-          Organize seu espaço de trabalho. Itens são desbloqueados conforme você conquista conquistas!
+        <p className="text-text-secondary mb-1">
+          Organize seu espaço do jeito que quiser. Arraste, gire e redimensione!
         </p>
-        <p className="text-xs text-text-secondary italic mb-6">
-          Itens com 🔒 precisam de conquistas específicas — explore o site para desbloquear tudo!
+        <p className="text-xs text-text-secondary italic mb-4">
+          Itens com 🔒 são desbloqueados por conquistas — use o site para liberar tudo!
         </p>
       </motion.div>
 
-      {/* Progress bar */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="bg-card rounded-xl border border-border p-4 mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <span className="font-semibold text-text text-sm">Itens desbloqueados: {unlockedCount}/{totalItems}</span>
-            <span className="text-text-secondary text-xs ml-3">Colocados: {placedCount}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-green-dark">{roomScore}%</span>
-            {placedItems.length > 0 && (
-              <button onClick={handleClearAll} className="p-1.5 rounded-lg text-text-secondary hover:text-terracotta hover:bg-border-light transition" title="Limpar ambiente">
-                <RotateCcw size={14} />
-              </button>
-            )}
-          </div>
+      {/* Top bar */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-text">
+            {unlockedCount}/{ITEMS.length} itens desbloqueados
+          </span>
+          <span className="text-sm text-text-secondary">
+            · {placed.length} colocados
+          </span>
         </div>
-        <div className="w-full h-2.5 bg-border-light rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${(unlockedCount / totalItems) * 100}%` }}
-            transition={{ duration: 0.8 }}
-            className="h-full bg-green-dark rounded-full"
-          />
+        <div className="flex items-center gap-2">
+          {/* Theme selector */}
+          <div className="flex items-center gap-1">
+            <Palette size={14} className="text-text-secondary" />
+            {ROOM_THEMES.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id)}
+                className={`w-5 h-5 rounded-full border-2 transition ${theme === t.id ? "border-green-dark scale-110" : "border-border"}`}
+                style={{ backgroundColor: t.floor }}
+                title={t.name}
+              />
+            ))}
+          </div>
+          {placed.length > 0 && (
+            <button onClick={handleClear} className="px-3 py-1 rounded-lg text-xs text-text-secondary hover:text-terracotta hover:bg-border-light transition">
+              Limpar
+            </button>
+          )}
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Items sidebar */}
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }} className="lg:col-span-1">
-          <div className="bg-card rounded-xl border border-border p-4">
-            <h2 className="font-semibold text-text mb-3 text-sm">Itens disponíveis</h2>
-            <div className="space-y-2 max-h-[500px] overflow-y-auto">
-              {ROOM_ITEMS.map((item) => {
-                const unlocked = isItemUnlocked(item);
-                const isPlaced = placedTypes.has(item.id);
-                const isSelected = selectedItem === item.id;
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Item panel */}
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.15 }}
+          className="lg:col-span-3"
+        >
+          <div className="bg-card rounded-xl border border-border p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-semibold text-text text-sm">Itens</h2>
+              <span className="text-xs text-text-secondary">{unlockedCount} disponíveis</span>
+            </div>
+
+            {/* Category filter */}
+            <div className="flex flex-wrap gap-1 mb-3">
+              {["Todos", "Mobília", "Tecnologia", "Decoração", "Ergonomia", "Conforto", "Especial"].map(cat => (
+                <span key={cat} className="text-[10px] px-2 py-0.5 rounded-full bg-border-light text-text-secondary">
+                  {cat}
+                </span>
+              ))}
+            </div>
+
+            <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
+              {ITEMS.map((item) => {
+                const unlocked = isUnlocked(item);
+                const alreadyPlaced = placedTypes.has(item.id);
 
                 return (
                   <motion.button
                     key={item.id}
-                    whileHover={unlocked ? { scale: 1.02 } : {}}
-                    whileTap={unlocked ? { scale: 0.98 } : {}}
-                    onClick={() => {
-                      if (unlocked && !isPlaced) {
-                        setSelectedItem(isSelected ? null : item.id);
-                      }
-                    }}
-                    className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition text-sm ${
-                      !unlocked ? "opacity-50 cursor-not-allowed" :
-                      isPlaced ? "bg-green-light/30 cursor-default" :
-                      isSelected ? "bg-green-dark text-white ring-2 ring-green" :
-                      "hover:bg-border-light cursor-pointer"
+                    whileHover={unlocked && !alreadyPlaced ? { scale: 1.02 } : {}}
+                    whileTap={unlocked && !alreadyPlaced ? { scale: 0.97 } : {}}
+                    onClick={() => unlocked && !alreadyPlaced && handleAddItem(item)}
+                    className={`w-full flex items-center gap-2.5 p-2 rounded-xl text-left transition ${
+                      !unlocked ? "opacity-40 cursor-not-allowed" :
+                      alreadyPlaced ? "bg-green-light/20" :
+                      "hover:bg-border-light cursor-pointer active:bg-green-light/30"
                     }`}
                   >
-                    <span className="text-xl flex-shrink-0">{item.emoji}</span>
+                    <span className="text-xl flex-shrink-0">{unlocked ? item.emoji : "🔒"}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{item.name}</p>
+                      <p className="text-sm font-medium text-text truncate">{item.name}</p>
                       {!unlocked ? (
-                        <p className="text-xs text-text-secondary flex items-center gap-1">
-                          <Lock size={10} /> {item.requiredLabel}
+                        <p className="text-[10px] text-text-secondary flex items-center gap-0.5">
+                          <Lock size={8} /> {item.needLabel}
                         </p>
-                      ) : isPlaced ? (
-                        <p className="text-xs text-green-dark flex items-center gap-1">
-                          <Check size={10} /> Colocado
+                      ) : alreadyPlaced ? (
+                        <p className="text-[10px] text-green-dark flex items-center gap-0.5">
+                          <Check size={8} /> No ambiente
                         </p>
-                      ) : isSelected ? (
-                        <p className="text-xs opacity-80">Clique no ambiente para posicionar</p>
                       ) : (
-                        <p className="text-xs text-text-secondary">{item.category} · +{item.xpReward} XP</p>
+                        <p className="text-[10px] text-text-secondary">{item.category} · +{item.xp} XP</p>
                       )}
                     </div>
                   </motion.button>
@@ -252,181 +248,241 @@ export default function MonteAmbientePage() {
           </div>
         </motion.div>
 
-        {/* Room grid */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-2">
-          <div className="bg-card rounded-xl border border-border p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-text text-sm">Seu ambiente</h2>
-              {selectedItem && (
-                <span className="text-xs text-green-dark font-medium animate-pulse-soft">
-                  Clique em uma posição para colocar {ROOM_ITEMS.find(i => i.id === selectedItem)?.name}
-                </span>
-              )}
+        {/* Room */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="lg:col-span-9"
+        >
+          <div
+            ref={roomRef}
+            className="relative rounded-2xl border-2 overflow-hidden select-none"
+            style={{
+              borderColor: currentTheme.wallBorder,
+              minHeight: 480,
+              background: `linear-gradient(180deg, ${currentTheme.wall} 0%, ${currentTheme.wall} 60%, ${currentTheme.floor} 60%, ${currentTheme.floor} 100%)`,
+            }}
+            onClick={() => setSelectedPlaced(null)}
+          >
+            {/* Wall decorations */}
+            <div className="absolute top-3 left-4 text-xs font-medium text-text-secondary/40">
+              Espaço de {name}
             </div>
 
-            {/* Room visualization */}
-            <div className="relative bg-gradient-to-b from-blue-light/10 to-green-light/10 rounded-xl border border-border-light p-2 mb-4">
-              {/* Room label */}
-              <p className="text-xs text-text-secondary text-center mb-2">Ambiente de {name}</p>
+            {/* Floor line */}
+            <div className="absolute left-0 right-0 top-[60%] border-t border-dashed" style={{ borderColor: currentTheme.wallBorder }} />
 
-              {/* Grid */}
-              <div
-                className="grid gap-1 relative"
-                style={{
-                  gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
-                  gridTemplateRows: `repeat(${GRID_ROWS}, 1fr)`,
-                }}
-              >
-                {Array.from({ length: GRID_ROWS * GRID_COLS }, (_, idx) => {
-                  const row = Math.floor(idx / GRID_COLS);
-                  const col = idx % GRID_COLS;
-                  const occupied = isOccupied(row, col);
+            {/* Grid dots */}
+            <div className="absolute inset-0 pointer-events-none opacity-[0.07]" style={{
+              backgroundImage: `radial-gradient(circle, ${currentTheme.wallBorder} 1px, transparent 1px)`,
+              backgroundSize: "30px 30px",
+            }} />
 
-                  return (
-                    <div
-                      key={idx}
-                      className={`aspect-square rounded-lg border transition text-center flex items-center justify-center relative ${
-                        occupied ? "border-transparent" :
-                        selectedItem ? "border-dashed border-green/40 hover:bg-green-light/20 hover:border-green cursor-pointer" :
-                        "border-border-light/50"
-                      }`}
-                      style={{ minHeight: 40 }}
-                      onClick={() => {
-                        if (selectedItem && !occupied) {
-                          const item = ROOM_ITEMS.find(i => i.id === selectedItem);
-                          if (item) handlePlaceItem(item, row, col);
-                        }
-                      }}
-                    >
-                      {/* Render placed items at their origin cell */}
-                      {occupied && occupied.row === row && occupied.col === col && (() => {
-                        const def = ROOM_ITEMS.find(i => i.id === occupied.itemId);
-                        if (!def) return null;
-                        return (
-                          <motion.div
-                            initial={{ scale: 0, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                            className="absolute inset-0 flex items-center justify-center rounded-lg bg-card border border-green/30 shadow-sm cursor-pointer hover:ring-2 hover:ring-terracotta z-10"
-                            style={{
-                              gridColumn: `span ${def.width}`,
-                              gridRow: `span ${def.height}`,
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveItem(occupied.id);
-                            }}
-                            title={`Clique para remover ${def.name}`}
-                          >
-                            <span className="text-lg">{def.emoji}</span>
-                          </motion.div>
-                        );
-                      })()}
-                    </div>
-                  );
-                })}
+            {/* Empty state */}
+            {placed.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="text-center opacity-30">
+                  <p className="text-4xl mb-2">🏠</p>
+                  <p className="text-sm font-medium">Clique em um item para adicionar</p>
+                  <p className="text-xs">Arraste para mover · Gire e redimensione</p>
+                </div>
               </div>
+            )}
 
-              {/* Placed items overlay (for multi-cell items) */}
-              <div className="absolute inset-0 pointer-events-none p-2">
-                {placedItems.map((placed) => {
-                  const def = ROOM_ITEMS.find(i => i.id === placed.itemId);
-                  if (!def) return null;
-                  // Calculate position as percentage
-                  const left = (placed.col / GRID_COLS) * 100;
-                  const top = (placed.row / GRID_ROWS) * 100;
-                  const width = (def.width / GRID_COLS) * 100;
-                  const height = (def.height / GRID_ROWS) * 100;
+            {/* Placed items */}
+            {placed.map((p) => {
+              const def = ITEMS.find(i => i.id === p.itemId);
+              if (!def) return null;
+              const isSelected = selectedPlaced === p.id;
 
-                  return (
-                    <motion.div
-                      key={placed.id}
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                      className="absolute flex items-center justify-center rounded-lg bg-card/90 border border-green/30 shadow-sm pointer-events-auto cursor-pointer hover:ring-2 hover:ring-terracotta z-10"
-                      style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
-                      onClick={() => {
-                        setShowTip({ item: def, pos: { row: placed.row, col: placed.col } });
-                      }}
-                      title={`${def.name} — clique para dica, duplo-clique para remover`}
-                      onDoubleClick={() => handleRemoveItem(placed.id)}
-                    >
-                      <span style={{ fontSize: Math.min(width * 0.8, height * 0.8, 32) }} className="select-none">{def.emoji}</span>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Tip display */}
-            <AnimatePresence>
-              {showTip && (
+              return (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="bg-green-light/30 rounded-xl p-3 mb-4 overflow-hidden"
+                  key={p.id}
+                  drag
+                  dragMomentum={false}
+                  dragElastic={0}
+                  onDragStart={() => { setDraggingId(p.id); setSelectedPlaced(p.id); }}
+                  onDragEnd={(_, info) => {
+                    setDraggingId(null);
+                    setPlaced(prev => prev.map(item =>
+                      item.id === p.id ? {
+                        ...item,
+                        x: item.x + info.offset.x,
+                        y: item.y + info.offset.y,
+                      } : item
+                    ));
+                  }}
+                  onClick={(e) => { e.stopPropagation(); setSelectedPlaced(p.id); }}
+                  className={`absolute cursor-grab active:cursor-grabbing group ${
+                    isSelected ? "z-50" : "z-10"
+                  }`}
+                  style={{
+                    left: p.x,
+                    top: p.y,
+                    transform: `rotate(${p.rotation}deg) scale(${p.scale})`,
+                    transformOrigin: "center center",
+                  }}
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 >
-                  <div className="flex items-start gap-2">
-                    <span className="text-lg">{showTip.item.emoji}</span>
-                    <div className="flex-1">
-                      <p className="font-medium text-green-dark text-sm">{showTip.item.name}</p>
-                      <p className="text-xs text-text mt-0.5">{showTip.item.tip}</p>
-                    </div>
-                    <button onClick={() => setShowTip(null)} className="text-text-secondary hover:text-text text-xs">✕</button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  {/* Item visual */}
+                  <div className={`relative flex items-center justify-center rounded-xl transition-all ${
+                    isSelected ? "ring-2 ring-green-dark ring-offset-2 shadow-lg" : "hover:shadow-md"
+                  }`} style={{
+                    width: def.w,
+                    height: def.h,
+                    backgroundColor: theme === "dark" ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.6)",
+                    backdropFilter: "blur(4px)",
+                    border: `1px solid ${theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"}`,
+                  }}>
+                    <span className="select-none" style={{ fontSize: Math.min(def.w, def.h) * 0.5 }}>
+                      {def.emoji}
+                    </span>
 
-            {/* Evaluation */}
-            <div className="border-t border-border pt-3">
-              <h3 className="font-semibold text-text text-sm mb-2 flex items-center gap-1">
-                <Info size={14} /> Avaliação do ambiente
-              </h3>
-              <div className="space-y-1">
-                {getEvaluation().map((tip, i) => (
-                  <p key={i} className={`text-xs ${tip.startsWith("✓") ? "text-green-dark" : tip.startsWith("○") ? "text-text-secondary" : "text-text"}`}>
-                    {tip}
-                  </p>
-                ))}
-              </div>
-            </div>
+                    {/* Name tooltip on hover */}
+                    <div className={`absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap transition-opacity ${
+                      isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-80"
+                    }`} style={{ backgroundColor: theme === "dark" ? "#333" : "#fff", color: theme === "dark" ? "#eee" : "#28332B" }}>
+                      {def.name}
+                    </div>
+                  </div>
+
+                  {/* Selection controls */}
+                  <AnimatePresence>
+                    {isSelected && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="absolute -top-8 left-1/2 -translate-x-1/2 flex items-center gap-1 z-50"
+                      >
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRotate(p.id); }}
+                          className="w-6 h-6 rounded-full bg-card shadow flex items-center justify-center hover:bg-border-light transition"
+                          title="Girar"
+                        >
+                          <RotateCw size={11} className="text-text" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleScale(p.id, 1); }}
+                          className="w-6 h-6 rounded-full bg-card shadow flex items-center justify-center hover:bg-border-light transition"
+                          title="Aumentar"
+                        >
+                          <ZoomIn size={11} className="text-text" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleScale(p.id, -1); }}
+                          className="w-6 h-6 rounded-full bg-card shadow flex items-center justify-center hover:bg-border-light transition"
+                          title="Diminuir"
+                        >
+                          <ZoomOut size={11} className="text-text" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowTip(p.id); }}
+                          className="w-6 h-6 rounded-full bg-card shadow flex items-center justify-center hover:bg-border-light transition"
+                          title="Dica"
+                        >
+                          <Info size={11} className="text-text" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRemove(p.id); }}
+                          className="w-6 h-6 rounded-full bg-terracotta shadow flex items-center justify-center hover:bg-terracotta-light transition"
+                          title="Remover"
+                        >
+                          <Trash2 size={11} className="text-white" />
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })}
+
+            {/* Tip overlay */}
+            <AnimatePresence>
+              {showTip && (() => {
+                const p = placed.find(i => i.id === showTip);
+                const def = p ? ITEMS.find(i => i.id === p.itemId) : null;
+                if (!def || !p) return null;
+                return (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 z-[60] flex items-center justify-center bg-black/20"
+                    onClick={() => setShowTip(null)}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.9 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0.9 }}
+                      className="bg-card rounded-2xl shadow-xl p-6 max-w-xs text-center"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <span className="text-4xl">{def.emoji}</span>
+                      <h3 className="font-bold text-text mt-2">{def.name}</h3>
+                      <p className="text-sm text-text-secondary mt-2">{def.tip}</p>
+                      <button onClick={() => setShowTip(null)} className="mt-4 px-5 py-2 rounded-xl bg-green-dark text-white text-sm font-medium hover:bg-green transition">
+                        Entendi
+                      </button>
+                    </motion.div>
+                  </motion.div>
+                );
+              })()}
+            </AnimatePresence>
           </div>
+
+          {/* Selected item info */}
+          <AnimatePresence>
+            {selectedItemDef && selectedDef && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-green-light/20 rounded-xl p-3 mt-3 overflow-hidden"
+              >
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-lg">{selectedItemDef.emoji}</span>
+                  <span className="font-medium text-green-dark">{selectedItemDef.name}</span>
+                  <span className="text-text-secondary">· {selectedItemDef.category}</span>
+                  <span className="text-text-secondary ml-auto text-xs">
+                    Arraste para mover · Use os botões para girar e redimensionar
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
 
       {/* Unlock guide */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="bg-card rounded-xl border border-border p-5 mt-6">
         <h2 className="font-semibold text-text mb-3 flex items-center gap-2">
-          <Trophy size={16} className="text-terracotta" /> Como desbloquear itens
+          <Sparkles size={16} className="text-terracotta" /> Como desbloquear mais itens
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {ROOM_ITEMS.filter(item => item.requiredAchievement).map((item) => {
-            const unlocked = isItemUnlocked(item);
-            const achDef = ACHIEVEMENTS_DEF.find(a => a.id === item.requiredAchievement);
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          {ITEMS.filter(item => item.achievement && !isUnlocked(item)).map((item) => {
+            const achDef = ACHIEVEMENTS_DEF.find(a => a.id === item.achievement);
             return (
-              <div key={item.id} className={`flex items-center gap-3 p-3 rounded-xl ${unlocked ? "bg-green-light/30" : "bg-border-light/50"}`}>
-                <span className="text-xl">{unlocked ? item.emoji : "🔒"}</span>
-                <div className="flex-1">
-                  <p className={`text-sm font-medium ${unlocked ? "text-green-dark" : "text-text"}`}>{item.name}</p>
-                  <p className="text-xs text-text-secondary">
-                    {unlocked ? (
-                      <span className="flex items-center gap-1"><Check size={10} className="text-green-dark" /> Desbloqueado</span>
-                    ) : (
-                      <span>{achDef?.icon} {item.requiredLabel}</span>
-                    )}
-                  </p>
+              <div key={item.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-border-light/50">
+                <span className="text-lg">🔒</span>
+                <div>
+                  <p className="text-sm font-medium text-text">{item.name}</p>
+                  <p className="text-[10px] text-text-secondary">{achDef?.icon} {item.needLabel}</p>
                 </div>
               </div>
             );
           })}
+          {ITEMS.filter(item => item.achievement && !isUnlocked(item)).length === 0 && (
+            <div className="col-span-full text-center py-4">
+              <p className="text-green-dark font-medium">🎉 Todos os itens estão desbloqueados!</p>
+            </div>
+          )}
         </div>
       </motion.div>
 
-      {/* Disclaimer */}
       <p className="text-xs text-text-secondary text-center mt-6 italic">
         As dicas são baseadas em recomendações de ergonomia e não substituem avaliação profissional.
       </p>
