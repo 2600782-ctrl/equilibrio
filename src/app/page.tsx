@@ -109,13 +109,13 @@ export default function HomePage() {
       {/* Game teaser */}
       <motion.section {...fadeUp} transition={{ delay: 0.3 }} className="mb-8">
         <div className="bg-card rounded-xl border border-border p-6 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Em breve</p>
-          <h2 className="text-xl font-bold text-green-dark mb-2">Ecos do Equilíbrio</h2>
+          <p className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Novo</p>
+          <h2 className="text-xl font-bold text-green-dark mb-2">🌱 Jardim Virtual</h2>
           <p className="text-sm text-text-secondary max-w-md mx-auto mb-4">
-            Uma aventura 2D está sendo desenvolvida para expandir o universo do Equilíbrio.
+            Seu jardim cresce conforme você usa o Equilíbrio. Cuide das suas plantas cuidando de você!
           </p>
-          <Link href="/jogo" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium text-text hover:bg-border-light transition">
-            Conhecer o Projeto <ArrowRight size={14} />
+          <Link href="/jogo" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-dark text-white text-sm font-medium hover:bg-green transition">
+            Ver meu jardim <ArrowRight size={14} />
           </Link>
         </div>
       </motion.section>
